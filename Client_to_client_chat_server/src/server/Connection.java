@@ -17,11 +17,13 @@ public class Connection implements Runnable {
 	private JTextArea chatWindow;
 	private List<Connection> clientsRunning;
 	private String clientsName;
+	private List<String> memberList;
 
-	public Connection(Socket clientSocket, JTextArea cw, List<Connection> c) {
+	public Connection(Socket clientSocket, JTextArea cw, List<Connection> c, List<String> memberList) {
 		connection = clientSocket;
 		clientsRunning = c;
 		chatWindow = cw;
+		this.memberList = memberList;
 	}
 
 	@Override
@@ -55,21 +57,25 @@ public class Connection implements Runnable {
 	}
 
 	private void showMessage(final String message) {
-		SwingUtilities.invokeLater( // creates a thread
-				new Runnable() {
-					public void run() {
-						chatWindow.append(message); // adds a message to the end of the document
-					}
-				});
+		SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				chatWindow.append(message); // adds a message to the end of the document
+			}
+		});
+
 	}
 
 	// send message to other clients
-	private void sendMessage(String message) {
+	private void sendMessage(Object message, boolean metoo) {
 		for (Connection client : clientsRunning) {
 			try {
-				if (client != this)
+				if (metoo) {
+					client.output.writeObject(message);
+					client.output.flush();
+				} else if (client != this) {
 					client.output.writeObject(message); // sends a message through the output
-				client.output.flush();
+					client.output.flush();
+				}
 			} catch (IOException iOException) {
 				chatWindow.append("\nERROR: I can't send that message..");
 			}
@@ -79,11 +85,11 @@ public class Connection implements Runnable {
 	// during the chat conversation
 	private void whileChatting() throws IOException {
 		String message = "";
-		getClientsName();
+		setClientsName();
 		do {
 			try {
 				message = (String) input.readObject(); // server waits input message
-				sendMessage(message); // sends the message to the others
+				sendMessage(message, false); // sends the message to the others
 			} catch (ClassNotFoundException e) {
 				e.printStackTrace();
 			}
@@ -91,10 +97,12 @@ public class Connection implements Runnable {
 		} while (!message.split(" ")[1].equals("end"));
 	}
 
-	private void getClientsName() throws IOException {
+	private void setClientsName() throws IOException {
 		try {
 			clientsName = (String) input.readObject(); // this is the first message received so it's the clients name
-			sendMessage(clientsName + " connected"); // info to the others
+			memberList.add(clientsName);
+			updateMemberList();
+			sendMessage(clientsName + " connected", false); // info to the others
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		}
@@ -103,10 +111,12 @@ public class Connection implements Runnable {
 	// close streams and sockets after you're done chatting
 	private void closeCrap() {
 		clientsRunning.remove(this);
+		memberList.remove(clientsName);
+		updateMemberList();
 		showMessage("\nClosing connections...");
 		try {
-			showMessage("\n" + connection.getInetAddress() + " disconnected");
-			sendMessage("\n" + this.clientsName + " disconnected");
+			showMessage(connection.getInetAddress() + " disconnected\n");
+			sendMessage(this.clientsName + " disconnected\n", false);
 			input.close();
 			output.close();
 			connection.close();
@@ -114,4 +124,17 @@ public class Connection implements Runnable {
 			iOException.printStackTrace();
 		}
 	}
+	private void updateMemberList() {
+		String[] newList = new String[memberList.size()];
+		int i = 0;
+		for(String member : memberList) {
+			newList[i] = member;
+			i++;
+		}
+		sendMessage(newList, true);
+	}
+
+	/*public String getName() {
+		return this.clientsName;
+	}*/
 }

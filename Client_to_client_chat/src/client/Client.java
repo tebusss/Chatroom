@@ -30,10 +30,12 @@ public class Client extends JFrame {
 	private String serverIP;
 	private Socket connection;
 	private String clientsName;
+	private JList<String> memberList;
 
 	public Client(String host) {
-		super("Client");
+		super("Client"); // is gonna be changed later on
 		serverIP = host;
+		// set the text field
 		userText = new JTextField();
 		userText.setEditable(false);
 		userText.addActionListener(new ActionListener() {
@@ -43,10 +45,24 @@ public class Client extends JFrame {
 				userText.setText("");
 			}
 		});
-		add(userText, BorderLayout.NORTH);
+		// set the chat area
 		chatWindow = new JTextArea();
-		add(new JScrollPane(chatWindow), BorderLayout.CENTER);
-		setSize(600, 200);
+		chatWindow.setEditable(false);
+
+		// The main layout
+		Container mainLayout = this.getContentPane();
+		mainLayout.setLayout(new BorderLayout());
+		mainLayout.setBackground(Color.LIGHT_GRAY);
+		mainLayout.add(userText, BorderLayout.PAGE_START);
+		mainLayout.add(new JScrollPane(chatWindow), BorderLayout.CENTER);
+
+		
+		memberList = new JList<>();
+		mainLayout.add(memberList, BorderLayout.EAST);
+		//
+		setSize(600, 600);
+		setLocationRelativeTo(null);
+		setVisible(true);
 	}
 
 	// connect to server
@@ -56,8 +72,7 @@ public class Client extends JFrame {
 			setupStreams();
 			askName();
 			whileChatting();
-		} catch (EOFException eOFException) { // This exception is mainly used by data input streams to signal end of
-												// stream.
+		} catch (EOFException eOFException) { // This exception is mainly used by data input streams to signal end of stream.
 			showMessage("\nConnection terminated");
 		} catch (IOException iOException) {
 			iOException.printStackTrace();
@@ -67,20 +82,36 @@ public class Client extends JFrame {
 	}
 
 	private void askName() {
+
 		JFrame askNameWindow = new JFrame();
-		JLabel instructionText = new JLabel("Hello " + connection.getInetAddress() + ". Give me your nickname!");
+		askNameWindow.setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
+		askNameWindow.addWindowListener(new WindowAdapter() {
+			@Override
+			public void windowClosing(WindowEvent we) {
+				askNameWindow.setAlwaysOnTop(false);
+				confirmClosing();
+				askNameWindow.setAlwaysOnTop(true);
+			}
+		});
+		askNameWindow.setAlwaysOnTop(true);
+		JLabel instructionText = new JLabel("Hello! Give me your nickname!");
 		JTextField nameField = new JTextField();
-		askNameWindow.setSize(350, 60);
+		askNameWindow.setSize(400, 80);
+		askNameWindow.setLocationRelativeTo(null);
 		nameField.addActionListener(event -> {
 			clientsName = event.getActionCommand();
-			askNameWindow.setVisible(false);
-			this.setVisible(true);
-			this.setTitle(clientsName + "n oma chatti-ikkuna");
-			sendWithoutShowing(clientsName);
+			if (!clientsName.equals("")) {
+				askNameWindow.setVisible(false);
+				this.setTitle(clientsName + "n oma chatti-ikkuna");
+				sendWithoutShowing(clientsName);
+				ableToType(true);
+			} else {
+				instructionText.setText("Your nickname should contain one or more letter.\nTry again");
+			}
 		});
 		askNameWindow.setVisible(true);
 		askNameWindow.add(instructionText, BorderLayout.NORTH);
-		askNameWindow.add(nameField, BorderLayout.CENTER);
+		askNameWindow.add(nameField, BorderLayout.AFTER_LAST_LINE);
 	}
 
 	// change or update chatWindow
@@ -91,6 +122,15 @@ public class Client extends JFrame {
 				chatWindow.append(message);
 			}
 		});
+	}
+
+	public void confirmClosing() {
+		if (JOptionPane.showConfirmDialog(this, "Do you really want to quit?", "Confirm", JOptionPane.YES_NO_OPTION,
+				JOptionPane.QUESTION_MESSAGE) == JOptionPane.YES_OPTION) {
+			System.exit(1); // breaks the application
+		} else
+			System.out.print("The answer is NOOOOO (so we continue)");
+
 	}
 
 	// close the streams and sockets
@@ -108,8 +148,7 @@ public class Client extends JFrame {
 
 	private void connectToServer() throws IOException {
 		showMessage("Attempting connection..");
-		connection = new Socket(InetAddress.getByName(serverIP), 6789); // InetAddress class represents an Internet
-																		// Protocol (IP) address.
+		connection = new Socket(InetAddress.getByName(serverIP),22); // InetAddress class represents an Internet																	// Protocol (IP) address.
 		showMessage("\nConnected to: " + connection.getInetAddress().getHostName() + ": " + serverIP);
 	}
 
@@ -121,11 +160,34 @@ public class Client extends JFrame {
 	}
 
 	private void whileChatting() throws IOException {
-		ableToType(true); // make sure this is possible
 		do {
 			try {
-				message = (String) input.readObject(); // we're trying to read the input continuously from the server
-				showMessage("\n" + message);
+			Object msg = input.readObject(); // we're trying to read the input continuously from the server
+				if (msg instanceof String) { // jos String
+					message = (String) msg;
+					showMessage("\n" + message);
+				} else if(msg instanceof String[]){
+					// ATM there's nothing else to come so....:
+					SwingUtilities.invokeLater(new Runnable() {
+						@Override
+						public void run() {
+							memberList.setModel(new AbstractListModel<String>() {
+								private static final long serialVersionUID = 1L; // ????
+								String[] names = (String[]) msg;
+								@Override
+								public int getSize() {
+									return names.length;
+								}
+								@Override
+								public String getElementAt(int index) {
+									return names[index];						
+								}
+								
+							});
+							
+						}	
+					});
+				}
 			} catch (ClassNotFoundException classNotFoundException) {
 				showMessage("\nI don't know that object to type");
 			}
@@ -161,5 +223,11 @@ public class Client extends JFrame {
 		} catch (IOException iOException) {
 			iOException.printStackTrace();
 		}
+	}
+
+	// Keeps track of running clients
+	private void updateMemberList() {
+		
+		showMessage("Members updated");
 	}
 }
